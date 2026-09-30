@@ -1,0 +1,30 @@
+{
+  "name": "gsubz-sdk",
+  "version": "0.1.0",
+  "description": "Unofficial TypeScript/JavaScript SDK for the GSUBZ API — airtime, data, cable TV, electricity, exam pins, social media, eSIM, bulk SMS and wallet.",
+  "keywords": ["gsubz", "vtu", "airtime", "data", "nigeria", "sdk", "api", "esim", "sms"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md", "LICENSE", "spec"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.cjs.json && node scripts/postbuild.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "example:live": "node examples/live-smoke.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

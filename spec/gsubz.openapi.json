@@ -1,0 +1,1896 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "GSUBZ API",
+    "version": "1.0.0",
+    "description": "Sell airtime, data, cable TV, electricity tokens, exam pins and social media services from your own website or app, using your GSUBZ wallet. Amounts are in Nigerian naira (NGN). Timestamps use West Africa Time (+01:00).\n\nAuthenticate every request except Get Plans, List eSIM Countries and List eSIM Packages with `Authorization: Bearer <API key>`. Get your key at https://gsubz.com/dashboard/key.php.\n\nA transaction can return HTTP 200 and still fail: always check the `status` field. Send a unique `requestID` with each purchase and use Fetch Transaction Status before retrying after a timeout."
+  },
+  "externalDocs": {
+    "description": "Human-readable documentation",
+    "url": "https://gsubz.com/api_doc/"
+  },
+  "servers": [
+    {
+      "url": "https://api.gsubz.com",
+      "description": "Production"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Wallet"
+    },
+    {
+      "name": "Plans"
+    },
+    {
+      "name": "Verify Customer"
+    },
+    {
+      "name": "Data & Airtime"
+    },
+    {
+      "name": "Cable TV"
+    },
+    {
+      "name": "Electricity"
+    },
+    {
+      "name": "Exam Pins"
+    },
+    {
+      "name": "Social Media Market"
+    },
+    {
+      "name": "Recharge Pins"
+    },
+    {
+      "name": "eSIM"
+    },
+    {
+      "name": "Bulk SMS"
+    },
+    {
+      "name": "Transactions"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/balance/": {
+      "post": {
+        "tags": [
+          "Wallet"
+        ],
+        "summary": "Fetch Wallet Balance",
+        "description": "Returns your current wallet balance in naira (\u20a6). Check it before a purchase so you can top up before a transaction fails with `INSUFFICIENT_BALANCE`.",
+        "operationId": "walletBalance",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  }
+                },
+                "required": [
+                  "api"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  }
+                },
+                "required": [
+                  "api"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "balance": "747.5"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plans/": {
+      "get": {
+        "tags": [
+          "Plans"
+        ],
+        "summary": "Get Plans",
+        "description": "One shared endpoint for every category's plan list: data, cable TV, social media and more. Pass the `service` you want and get back that service's plans. Call it before a purchase to get the correct plan value. Every plan shows its normal `price` and its `api_price`, the price you pay through the API.\n\nThe plan identifier is returned in a field called `PlanName`, and its value tells you which body field to submit when buying. Data and social media services use `plan`. Cable TV services use `variation_code`.",
+        "operationId": "plans",
+        "security": [],
+        "parameters": [
+          {
+            "name": "service",
+            "in": "query",
+            "required": true,
+            "description": "The service ID, for example `mtn_sme`. Also accepts cable (`gotv`, `dstv`, `startimes`) and social media (`socials`) service IDs. See [Service IDs](#service-ids).",
+            "schema": {
+              "type": "string",
+              "example": "mtn_sme"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "service": "MTN-SME-Data(*461*4#)",
+                  "PlanName": "plan",
+                  "fixedPrice": true,
+                  "discount": "4.81%",
+                  "plans": [
+                    {
+                      "displayName": "10GB - 30days",
+                      "value": "260",
+                      "price": "2400",
+                      "api_price": "2284.56"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verify-customer/": {
+      "post": {
+        "tags": [
+          "Verify Customer"
+        ],
+        "summary": "Verify Meter / IUC Number",
+        "description": "Checks a meter number or a cable smartcard/IUC number before payment and returns the customer's name (and, for electricity meters, their address and account type). Always verify before you charge: it catches typing mistakes before money moves.\n\nFor electricity services, `type` is required: `prepaid` or `postpaid`. For cable services (`dstv`, `gotv`, `startimes`), leave `type` out.",
+        "operationId": "verifyCustomer",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "serviceID": {
+                    "type": "string",
+                    "description": "Any electricity or cable service ID: see the list below, or `dstv`, `gotv`, `startimes` for cable. Underscores and hyphens both work, so `kaduna_electric` and `kaduna-electric` are the same.",
+                    "example": "kaduna_electric"
+                  },
+                  "billersCode": {
+                    "type": "string",
+                    "description": "The meter number (electricity) or smartcard/IUC number (cable).",
+                    "example": "00000000000"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "`prepaid` or `postpaid`. Required for electricity, omit for cable.",
+                    "example": "prepaid"
+                  }
+                },
+                "required": [
+                  "api",
+                  "serviceID",
+                  "billersCode"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "serviceID": "kaduna_electric",
+                "billersCode": "00000000000",
+                "type": "prepaid"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "serviceID": {
+                    "type": "string",
+                    "description": "Any electricity or cable service ID: see the list below, or `dstv`, `gotv`, `startimes` for cable. Underscores and hyphens both work, so `kaduna_electric` and `kaduna-electric` are the same.",
+                    "example": "kaduna_electric"
+                  },
+                  "billersCode": {
+                    "type": "string",
+                    "description": "The meter number (electricity) or smartcard/IUC number (cable).",
+                    "example": "00000000000"
+                  },
+                  "type": {
+                    "type": "string",
+                    "description": "`prepaid` or `postpaid`. Required for electricity, omit for cable.",
+                    "example": "prepaid"
+                  }
+                },
+                "required": [
+                  "api",
+                  "serviceID",
+                  "billersCode"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "serviceID": "kaduna_electric",
+                "billersCode": "00000000000",
+                "type": "prepaid"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "description": "CUSTOMER_FOUND",
+                  "content": {
+                    "customerName": "JOHN ADEBAYO",
+                    "address": "12 SAMPLE STREET, IKEJA",
+                    "meterNumber": "45000000000",
+                    "meterType": "PREPAID",
+                    "accountType": null,
+                    "canVend": "yes"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": 404,
+                  "status": "failed",
+                  "description": "CONTENT_NOT_FOUND",
+                  "api_response": "Could not verify this meter number"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pay/": {
+      "post": {
+        "tags": [
+          "Data & Airtime",
+          "Cable TV",
+          "Electricity",
+          "Exam Pins",
+          "Social Media Market"
+        ],
+        "summary": "Make a purchase",
+        "description": "One endpoint handles every purchase. The `serviceID` field decides what you are buying, and each service needs its own set of fields. Use the request variant that matches the service:\n\n- **Buy Data**: Send a data bundle to any Nigerian phone number. Call [Get Plans](#plans) with the network's `serviceID` first to get the exact `plan` value, then submit it here. The data service IDs are listed under [Service IDs](#service-ids).\n- **Buy Airtime**: Send airtime to any Nigerian number. The `serviceID` must be one of `mtn`, `airtel`, `etisalat` (9mobile) or `glo`: lowercase, spelt exactly as shown.\n- **Buy TV / Decoder / Cable Sub**: Renew a DStv, GOtv or StarTimes subscription. The `serviceID` must be `gotv`, `dstv` or `startimes`. Verify the smartcard/IUC number with [Verify Meter / IUC Number](#verify-customer) first.\n- **Buy Electric Token**: Generate an electricity token (prepaid) or pay a postpaid bill for any supported distribution company. Verify the meter number first with [Verify Meter / IUC Number](#verify-customer) so your customer sees their own name before you charge them.\n- **Buy Exam Pin**: Buy an exam pin. The `serviceID` must be `waec`, `neco` or `nabteb`: lowercase, spelt exactly as shown. Each exam service has one plan.\n- **Buy Social Media Service**: Place a social media order. The `serviceID` is always `socials`. Call [Get Plans](#plans) with `service=socials` first to get the `plan` value for the service you want (for example Instagram followers or TikTok likes).",
+        "operationId": "makePurchase",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/BuyDataRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyAirtimeRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyCableRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyElectricRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyExamPinRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuySocialRequest"
+                  }
+                ]
+              },
+              "examples": {
+                "buyData": {
+                  "summary": "Buy Data",
+                  "value": {
+                    "serviceID": "mtn_sme",
+                    "plan": "260",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "phone": "08031234567",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyAirtime": {
+                  "summary": "Buy Airtime",
+                  "value": {
+                    "serviceID": "mtn",
+                    "api": "YOUR_API_KEY",
+                    "amount": "100",
+                    "phone": "08031234567",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyCable": {
+                  "summary": "Buy TV / Decoder / Cable Sub",
+                  "value": {
+                    "serviceID": "gotv",
+                    "api": "YOUR_API_KEY",
+                    "variation_code": "gotv-smallie",
+                    "phone": "08031234567",
+                    "amount": "",
+                    "customerID": "0000000000",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyElectric": {
+                  "summary": "Buy Electric Token",
+                  "value": {
+                    "serviceID": "kaduna_electric",
+                    "api": "YOUR_API_KEY",
+                    "phone": "08031234567",
+                    "customerID": "00000000000",
+                    "amount": "1100",
+                    "variation_code": "prepaid",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyExamPin": {
+                  "summary": "Buy Exam Pin",
+                  "value": {
+                    "serviceID": "waec",
+                    "plan": "waecdirect",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "phone": "08031234567",
+                    "requestID": "87dfhw8dbw8e7hw9d9dh"
+                  }
+                },
+                "buySocial": {
+                  "summary": "Buy Social Media Service",
+                  "value": {
+                    "serviceID": "socials",
+                    "plan": "179",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "link": "https://instagram.com/gsubzonline",
+                    "quantity": "1000",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                }
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/BuyDataRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyAirtimeRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyCableRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyElectricRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuyExamPinRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BuySocialRequest"
+                  }
+                ]
+              },
+              "examples": {
+                "buyData": {
+                  "summary": "Buy Data",
+                  "value": {
+                    "serviceID": "mtn_sme",
+                    "plan": "260",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "phone": "08031234567",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyAirtime": {
+                  "summary": "Buy Airtime",
+                  "value": {
+                    "serviceID": "mtn",
+                    "api": "YOUR_API_KEY",
+                    "amount": "100",
+                    "phone": "08031234567",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyCable": {
+                  "summary": "Buy TV / Decoder / Cable Sub",
+                  "value": {
+                    "serviceID": "gotv",
+                    "api": "YOUR_API_KEY",
+                    "variation_code": "gotv-smallie",
+                    "phone": "08031234567",
+                    "amount": "",
+                    "customerID": "0000000000",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyElectric": {
+                  "summary": "Buy Electric Token",
+                  "value": {
+                    "serviceID": "kaduna_electric",
+                    "api": "YOUR_API_KEY",
+                    "phone": "08031234567",
+                    "customerID": "00000000000",
+                    "amount": "1100",
+                    "variation_code": "prepaid",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                },
+                "buyExamPin": {
+                  "summary": "Buy Exam Pin",
+                  "value": {
+                    "serviceID": "waec",
+                    "plan": "waecdirect",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "phone": "08031234567",
+                    "requestID": "87dfhw8dbw8e7hw9d9dh"
+                  }
+                },
+                "buySocial": {
+                  "summary": "Buy Social Media Service",
+                  "value": {
+                    "serviceID": "socials",
+                    "plan": "179",
+                    "api": "YOUR_API_KEY",
+                    "amount": "",
+                    "link": "https://instagram.com/gsubzonline",
+                    "quantity": "1000",
+                    "requestID": "8dhbc8w7huwh8hw9hew9"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response. Check `status`: a transaction can return HTTP 200 and still fail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                },
+                "examples": {
+                  "buyData": {
+                    "summary": "Buy Data",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3878886201,
+                      "amount": 2400,
+                      "phone": "08031234567",
+                      "serviceID": "mtn_sme",
+                      "amountPaid": 2284.56,
+                      "initialBalance": 5000,
+                      "finalBalance": 2715.44,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "Dear Customer, You have successfully shared 10GB Data to 2348031234567. Thankyou"
+                    }
+                  },
+                  "buyAirtime": {
+                    "summary": "Buy Airtime",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3768661863,
+                      "amount": 800,
+                      "phone": "08031234567",
+                      "serviceID": "mtn",
+                      "amountPaid": 768,
+                      "initialBalance": 5000,
+                      "finalBalance": 4232,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "You have topped up N800.00 to 2348031234567. ref: 2026092809402519057879292"
+                    }
+                  },
+                  "buyCable": {
+                    "summary": "Buy TV / Decoder / Cable Sub",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3685573902,
+                      "amount": 900,
+                      "phone": "08031234567",
+                      "serviceID": "gotv",
+                      "amountPaid": 882,
+                      "initialBalance": 5000,
+                      "finalBalance": 4118,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "Your GOtv subscription was successful."
+                    }
+                  },
+                  "buyElectric": {
+                    "summary": "Buy Electric Token",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3574357094,
+                      "amount": 1100,
+                      "phone": "08031234567",
+                      "serviceID": "kaduna_electric",
+                      "amountPaid": 1100,
+                      "initialBalance": 5000,
+                      "finalBalance": 3900,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "Token: 47488383838383838383833"
+                    }
+                  },
+                  "buyExamPin": {
+                    "summary": "Buy Exam Pin",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3075647209,
+                      "amount": 3500,
+                      "phone": "08031234567",
+                      "serviceID": "waec",
+                      "amountPaid": 3500,
+                      "initialBalance": 5000,
+                      "finalBalance": 1500,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "968686868685<=>WRN2056666666"
+                    }
+                  },
+                  "buySocial": {
+                    "summary": "Buy Social Media Service",
+                    "value": {
+                      "code": 200,
+                      "status": "successful",
+                      "transactionID": 3075647200,
+                      "amount": 179,
+                      "serviceID": "socials",
+                      "amountPaid": 179,
+                      "initialBalance": 5000,
+                      "finalBalance": 4821,
+                      "date": "2026-09-28T09:47:15+01:00",
+                      "api_response": "Order received. Order ID: 39554883"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/apiV2/generate/": {
+      "post": {
+        "tags": [
+          "Recharge Pins"
+        ],
+        "summary": "Recharge Pins / Epins Printing",
+        "description": "Generate recharge card pins for printing. The `network` must be `mtn`, `airtel`, `glo` or `9mobile`: lowercase, spelt exactly as shown. This endpoint authenticates with the `Authorization` header only.",
+        "operationId": "generatePins",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "network": {
+                    "type": "string",
+                    "description": "`mtn`, `airtel`, `glo` or `9mobile`.",
+                    "example": "airtel"
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "Face value of each pin in naira: `100`, `200`, `400` or `500`.",
+                    "example": "500"
+                  },
+                  "number": {
+                    "type": "string",
+                    "description": "How many pins to generate. The minimum is 10 for values below 500.",
+                    "example": "1"
+                  }
+                },
+                "required": [
+                  "network",
+                  "value",
+                  "number"
+                ]
+              },
+              "example": {
+                "network": "airtel",
+                "value": "500",
+                "number": "1"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "network": {
+                    "type": "string",
+                    "description": "`mtn`, `airtel`, `glo` or `9mobile`.",
+                    "example": "airtel"
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "Face value of each pin in naira: `100`, `200`, `400` or `500`.",
+                    "example": "500"
+                  },
+                  "number": {
+                    "type": "string",
+                    "description": "How many pins to generate. The minimum is 10 for values below 500.",
+                    "example": "1"
+                  }
+                },
+                "required": [
+                  "network",
+                  "value",
+                  "number"
+                ]
+              },
+              "example": {
+                "network": "airtel",
+                "value": "500",
+                "number": "1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "message": "We Received your order, 1 of 1 delivered\n Thank you for your patronage",
+                  "status": "success",
+                  "id": "c143e774874a59623aa928292d128f97",
+                  "network": "Airtel",
+                  "value": "500",
+                  "number": "1",
+                  "delivered": "1",
+                  "pending": 0,
+                  "pins": [
+                    {
+                      "pin": "5794977707301520",
+                      "sn": "26026825914918714922"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/esim/countries/": {
+      "get": {
+        "tags": [
+          "eSIM"
+        ],
+        "summary": "List eSIM Countries",
+        "description": "An eSIM gives your customer mobile data in another country without a physical SIM card. Start here: list the countries, pick one, then call [List eSIM Packages](#esim-packages) with its `locationCodes`. This list is public and needs no API key.",
+        "operationId": "esimCountries",
+        "security": [],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Search text to filter countries by name, for example `fra` for France. Leave it out to list every country.",
+            "schema": {
+              "type": "string",
+              "example": "fra"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "countries": [
+                    {
+                      "country": "France",
+                      "locationCodes": "FR",
+                      "plans": 12
+                    },
+                    {
+                      "country": "Spain",
+                      "locationCodes": "ES",
+                      "plans": 9
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/esim/packages/": {
+      "get": {
+        "tags": [
+          "eSIM"
+        ],
+        "summary": "List eSIM Packages",
+        "description": "Returns the data packages for one country, cheapest first. Use the `packageCode` of the one your customer wants when you call [Buy eSIM](#esim-buy). This list is public and needs no API key.\n\n`price` is in naira and can change slightly between this list and your purchase, because the live price is checked when you buy. Read `amountPaid` in the purchase response for what was actually charged.",
+        "operationId": "esimPackages",
+        "security": [],
+        "parameters": [
+          {
+            "name": "locationCode",
+            "in": "query",
+            "required": true,
+            "description": "The `locationCodes` value from [List eSIM Countries](#esim-countries). You can send up to twenty codes, separated by commas.",
+            "schema": {
+              "type": "string",
+              "example": "FR"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "packages": [
+                    {
+                      "packageCode": "FR_1_7",
+                      "name": "France 1GB 7Days",
+                      "country": "France",
+                      "dataGB": 1,
+                      "duration": 7,
+                      "durationUnit": "DAY",
+                      "price": 2607,
+                      "refundable": true,
+                      "topUp": true
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/esim/buy/": {
+      "post": {
+        "tags": [
+          "eSIM"
+        ],
+        "summary": "Buy eSIM",
+        "description": "Buys one eSIM. Your wallet is charged and the eSIM details come back in the response: scan the `qrCodeUrl` image or type the `activationCode` into the phone to install it.\n\nAlways send a `requestID`. If you send the same one again, the API returns the original order (code `406`, `INVALID_ARGUMENTS_DUPLICATE_REQUEST_ID`) and never charges twice.\n\nIf `esimStatus` is `provisioning`, the eSIM is still being prepared. Call [Fetch eSIM Orders](#esim-orders) in a minute to get the QR code and activation code. You have already been charged.",
+        "operationId": "esimBuy",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "packageCode": {
+                    "type": "string",
+                    "description": "The `packageCode` from [List eSIM Packages](#esim-packages).",
+                    "example": "FR_1_7"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "Your own unique reference for this order, up to 100 characters. Use it later with [Fetch eSIM Orders](#esim-orders).",
+                    "example": "esim-1001"
+                  }
+                },
+                "required": [
+                  "api",
+                  "packageCode"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "packageCode": "FR_1_7",
+                "requestID": "esim-1001"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "packageCode": {
+                    "type": "string",
+                    "description": "The `packageCode` from [List eSIM Packages](#esim-packages).",
+                    "example": "FR_1_7"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "Your own unique reference for this order, up to 100 characters. Use it later with [Fetch eSIM Orders](#esim-orders).",
+                    "example": "esim-1001"
+                  }
+                },
+                "required": [
+                  "api",
+                  "packageCode"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "packageCode": "FR_1_7",
+                "requestID": "esim-1001"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "transactionID": "ESIMA0BA0EC673A45212",
+                  "orderID": 1,
+                  "amount": 3476,
+                  "serviceID": "esim",
+                  "amountPaid": 3476,
+                  "initialBalance": 100000,
+                  "finalBalance": 96524,
+                  "date": "2026-09-28T12:36:59+01:00",
+                  "api_response": "Your eSIM is ready. Scan the QR code or enter the activation code to install it.",
+                  "requestID": "esim-1001",
+                  "packageCode": "FR_1_7",
+                  "packageName": "France 1GB 7Days",
+                  "country": "France",
+                  "esimStatus": "active",
+                  "iccid": "8944500102030405060",
+                  "activationCode": "LPA:1$rsp.example.com$ABCD-1234-EFGH",
+                  "qrCodeUrl": "https://example.com/qr/ORD-123"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": 402,
+                  "status": "failed",
+                  "description": "INSUFFICIENT_BALANCE",
+                  "api_response": "Insufficient balance. This eSIM costs \u20a63,476.00 but your wallet has \u20a6100.00."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/esim/orders/": {
+      "post": {
+        "tags": [
+          "eSIM"
+        ],
+        "summary": "Fetch eSIM Orders",
+        "description": "Returns your eSIM orders. Send a `requestID` or an `orderID` to get one order, or send neither to list your last 50. An order that was still being prepared is checked again each time you call, so this is also how you collect the QR code after a `provisioning` purchase.",
+        "operationId": "esimOrders",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "The `requestID` you sent when you bought the eSIM.",
+                    "example": "esim-1001"
+                  },
+                  "orderID": {
+                    "type": "integer",
+                    "description": "The `orderID` from the purchase response.",
+                    "example": 1
+                  }
+                },
+                "required": [
+                  "api"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "requestID": "esim-1001",
+                "orderID": "1"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "The `requestID` you sent when you bought the eSIM.",
+                    "example": "esim-1001"
+                  },
+                  "orderID": {
+                    "type": "integer",
+                    "description": "The `orderID` from the purchase response.",
+                    "example": 1
+                  }
+                },
+                "required": [
+                  "api"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "requestID": "esim-1001",
+                "orderID": "1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "orders": [
+                    {
+                      "orderID": 1,
+                      "transactionID": "ESIMA0BA0EC673A45212",
+                      "packageCode": "FR_1_7",
+                      "packageName": "France 1GB 7Days",
+                      "country": "France",
+                      "amountPaid": 3476,
+                      "amountRefunded": 0,
+                      "esimStatus": "active",
+                      "iccid": "8944500102030405060",
+                      "activationCode": "LPA:1$rsp.example.com$ABCD-1234-EFGH",
+                      "qrCodeUrl": "https://example.com/qr/ORD-123",
+                      "date": "2026-09-28T12:36:59+01:00"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": 404,
+                  "status": "failed",
+                  "description": "CONTENT_NOT_FOUND",
+                  "api_response": "No eSIM order found for that reference."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/esim/cancel/": {
+      "post": {
+        "tags": [
+          "eSIM"
+        ],
+        "summary": "Cancel eSIM",
+        "description": "Cancels an eSIM that has not been installed and returns what you paid to your wallet. It can only work once for each order.\n\nOnly an unused eSIM can be cancelled. If it has already been installed, used or refunded, the request is refused with `NOT_CANCELLABLE` and nothing is refunded.",
+        "operationId": "esimCancel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "orderID": {
+                    "type": "integer",
+                    "description": "The `orderID` from the purchase response or from [Fetch eSIM Orders](#esim-orders).",
+                    "example": 1
+                  }
+                },
+                "required": [
+                  "api",
+                  "orderID"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "orderID": "1"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "orderID": {
+                    "type": "integer",
+                    "description": "The `orderID` from the purchase response or from [Fetch eSIM Orders](#esim-orders).",
+                    "example": 1
+                  }
+                },
+                "required": [
+                  "api",
+                  "orderID"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "orderID": "1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "orderID": 1,
+                  "amountRefunded": 3476,
+                  "initialBalance": 96524,
+                  "finalBalance": 100000,
+                  "date": "2026-09-28T12:37:22+01:00",
+                  "api_response": "Refunded \u20a63,476.00."
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": 406,
+                  "status": "failed",
+                  "description": "NOT_CANCELLABLE",
+                  "api_response": "This eSIM cannot be cancelled. It may already be in use."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sms/": {
+      "post": {
+        "tags": [
+          "Bulk SMS"
+        ],
+        "summary": "Send Bulk SMS",
+        "description": "Sends one text message to up to 5,000 Nigerian numbers in a single request. Your wallet is charged first, the message is sent, and anything that could not be sent is refunded automatically.\n\nThe field names `from`, `to` and `msg` are the standard names most SMS gateways use, so code written for another SMS service needs very little change. The message type (normal or unicode) is detected for you, so you never send `type`.\n\nYour message is checked before anything is charged, because the networks block certain content. These are refused: names of banks and payment companies, international brands such as WhatsApp or Facebook, OTP or verification-code wording, messages that look like bank credit or debit alerts, and any run of four or more digits in a row (write amounts with commas, for example `5,000`; years like 2026 are fine). Numbers on the DND list are not delivered by the networks and are not refunded.\n\nYou pay per page, per recipient. One page is 160 characters (153 each once the message is longer), or 70 (67) if it has emoji or other special characters. The naira sign is sent as `N` so it does not turn the message into a special-character one. The price is currently \u20a65 per page per recipient, and `amount` in the response shows exactly what was charged.\n\nNumbers are cleaned and de-duplicated. Invalid or repeated numbers are skipped and counted in `skipped`. If some numbers cannot be sent, the request still returns `successful` with `failed` above zero, and those numbers are refunded. If nothing can be sent you get `GATEWAY_ERROR` and you are not charged.\n\nCommon failures, all with `\"status\": \"failed\"`: `INVALID_SENDER`, `MESSAGE_CONTENT_BLOCKED` (with an `issues` list), `NO_VALID_RECIPIENTS`, `TOO_MANY_RECIPIENTS` and `MESSAGE_TOO_LONG` (code `206`), and `DUPLICATE_MESSAGE` (code `406`, the same message to the same list within two minutes and no `requestID` sent). Send a `requestID` to send the same message again on purpose.",
+        "operationId": "sendSms",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "The sender name shown on the phone: 3 to 11 letters, with no spaces, numbers or symbols. Names of banks, payment companies, telecoms and government bodies cannot be used.",
+                    "example": "MyShop"
+                  },
+                  "to": {
+                    "type": "string",
+                    "description": "The phone numbers, separated by commas or new lines, up to 5,000. `080\u2026`, `234\u2026` and `+234\u2026` are all accepted.",
+                    "example": "08031234567,08021234568"
+                  },
+                  "msg": {
+                    "type": "string",
+                    "description": "The message text, up to 905 characters.",
+                    "example": "Hello, your order is ready for pickup."
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "Your own unique reference for this send, up to 100 characters. Send the same one again and you get the original result back, never a second send or charge. `message_uuid` is accepted as the same thing.",
+                    "example": "sms-1001"
+                  }
+                },
+                "required": [
+                  "api",
+                  "from",
+                  "to",
+                  "msg"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "from": "MyShop",
+                "to": "08031234567,08021234568",
+                "msg": "Hello, your order is ready for pickup.",
+                "requestID": "sms-1001"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "from": {
+                    "type": "string",
+                    "description": "The sender name shown on the phone: 3 to 11 letters, with no spaces, numbers or symbols. Names of banks, payment companies, telecoms and government bodies cannot be used.",
+                    "example": "MyShop"
+                  },
+                  "to": {
+                    "type": "string",
+                    "description": "The phone numbers, separated by commas or new lines, up to 5,000. `080\u2026`, `234\u2026` and `+234\u2026` are all accepted.",
+                    "example": "08031234567,08021234568"
+                  },
+                  "msg": {
+                    "type": "string",
+                    "description": "The message text, up to 905 characters.",
+                    "example": "Hello, your order is ready for pickup."
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "Your own unique reference for this send, up to 100 characters. Send the same one again and you get the original result back, never a second send or charge. `message_uuid` is accepted as the same thing.",
+                    "example": "sms-1001"
+                  }
+                },
+                "required": [
+                  "api",
+                  "from",
+                  "to",
+                  "msg"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "from": "MyShop",
+                "to": "08031234567,08021234568",
+                "msg": "Hello, your order is ready for pickup.",
+                "requestID": "sms-1001"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": 200,
+                  "status": "successful",
+                  "transactionID": 3530235131,
+                  "amount": 10,
+                  "serviceID": "bulk_sms",
+                  "amountPaid": 10,
+                  "initialBalance": 1000,
+                  "finalBalance": 990,
+                  "date": "2026-09-28T12:30:52+01:00",
+                  "api_response": "Your message was sent to 2 numbers.",
+                  "reference": "BSMSA260928123052FC8106",
+                  "requestID": "sms-1001",
+                  "sender": "MyShop",
+                  "recipients": 2,
+                  "sent": 2,
+                  "failed": 0,
+                  "skipped": 0,
+                  "pages": 1
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "code": 206,
+                  "status": "failed",
+                  "description": "MESSAGE_CONTENT_BLOCKED",
+                  "api_response": "This message would be blocked by the networks, so it was not sent. The networks block messages that mention international brands such as WhatsApp or Facebook.",
+                  "issues": [
+                    "The networks block messages that mention international brands such as WhatsApp or Facebook."
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/verify/": {
+      "post": {
+        "tags": [
+          "Transactions"
+        ],
+        "summary": "Fetch Transaction Status",
+        "description": "Check the status and response of a purchase using the `requestID` you sent when you made it. Use this whenever a purchase request times out or returns no response, before you try again.\n\nA transaction can return HTTP 200 and still have failed. Always check the `status` field, not just the response code.",
+        "operationId": "transactionStatus",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "The `requestID` you passed during the purchase.",
+                    "example": "7wbd7wbdw7d72g6vd"
+                  }
+                },
+                "required": [
+                  "api",
+                  "requestID"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "requestID": "7wbd7wbdw7d72g6vd"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "api": {
+                    "type": "string",
+                    "description": "Your API key. Send the same key you use in the `Authorization` header.",
+                    "example": "YOUR_API_KEY"
+                  },
+                  "requestID": {
+                    "type": "string",
+                    "description": "The `requestID` you passed during the purchase.",
+                    "example": "7wbd7wbdw7d72g6vd"
+                  }
+                },
+                "required": [
+                  "api",
+                  "requestID"
+                ]
+              },
+              "example": {
+                "api": "YOUR_API_KEY",
+                "requestID": "7wbd7wbdw7d72g6vd"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                },
+                "example": {
+                  "code": "200",
+                  "status": "success",
+                  "description": "TRANSACTION_SUCCESSFUL",
+                  "api_response": "Dear Customer, You have successfully shared 1GB Data to 2349063648020. Your SME data balance is 28955.68GB expires 30/01/2024. Thankyou"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error. See the Errors section: the failure is described in `code`, `description` and `api_response`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Your GSUBZ API key (it starts with `ap_`). Also send the same key in the `api` body field on endpoints that list it."
+      }
+    },
+    "schemas": {
+      "BuyDataRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "The data service ID, for example `mtn_sme`.",
+            "example": "mtn_sme"
+          },
+          "plan": {
+            "type": "string",
+            "description": "The plan value from [Get Plans](#plans) for this service.",
+            "example": "260"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Send as an empty string. The price is set by the plan.",
+            "example": ""
+          },
+          "phone": {
+            "type": "string",
+            "description": "The phone number to receive the data.",
+            "example": "08031234567"
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order (for example your order ID). Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "8dhbc8w7huwh8hw9hew9"
+          }
+        },
+        "required": [
+          "serviceID",
+          "plan",
+          "api",
+          "amount",
+          "phone"
+        ],
+        "title": "Buy Data"
+      },
+      "BuyAirtimeRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "`mtn`, `airtel`, `etisalat` (9mobile) or `glo`.",
+            "example": "mtn"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount of airtime in naira. The minimum is \u20a6100.",
+            "example": "100"
+          },
+          "phone": {
+            "type": "string",
+            "description": "The phone number to receive the airtime.",
+            "example": "08031234567"
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order (for example your order ID). Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "8dhbc8w7huwh8hw9hew9"
+          }
+        },
+        "required": [
+          "serviceID",
+          "api",
+          "amount",
+          "phone"
+        ],
+        "title": "Buy Airtime"
+      },
+      "BuyCableRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "`dstv`, `gotv` or `startimes`.",
+            "example": "gotv"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "variation_code": {
+            "type": "string",
+            "description": "The package from [Get Plans](#plans) (`service=gotv`, `dstv` or `startimes`).",
+            "example": "gotv-smallie"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Customer phone number. Can be any valid number.",
+            "example": "08031234567"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Send as an empty string. The price is set by the plan.",
+            "example": ""
+          },
+          "customerID": {
+            "type": "string",
+            "description": "The IUC or smartcard number of the decoder.",
+            "example": "0000000000"
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order (for example your order ID). Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "8dhbc8w7huwh8hw9hew9"
+          }
+        },
+        "required": [
+          "serviceID",
+          "api",
+          "variation_code",
+          "phone",
+          "amount",
+          "customerID"
+        ],
+        "title": "Buy TV / Decoder / Cable Sub"
+      },
+      "BuyElectricRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "The distribution company service ID. See the list below.",
+            "example": "kaduna_electric"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "phone": {
+            "type": "string",
+            "description": "Customer phone number. Can be any valid number.",
+            "example": "08031234567"
+          },
+          "customerID": {
+            "type": "string",
+            "description": "The meter number.",
+            "example": "00000000000"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Amount of electricity to buy, in naira.",
+            "example": "1100"
+          },
+          "variation_code": {
+            "type": "string",
+            "description": "`prepaid` or `postpaid`.",
+            "example": "prepaid"
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order (for example your order ID). Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "8dhbc8w7huwh8hw9hew9"
+          }
+        },
+        "required": [
+          "serviceID",
+          "api",
+          "phone",
+          "customerID",
+          "amount",
+          "variation_code"
+        ],
+        "title": "Buy Electric Token"
+      },
+      "BuyExamPinRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "`waec`, `neco` or `nabteb`.",
+            "example": "waec"
+          },
+          "plan": {
+            "type": "string",
+            "description": "The plan for the exam service. There is one plan per service; for WAEC it is `waecdirect`.",
+            "example": "waecdirect"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Send as an empty string. The price is set by the plan.",
+            "example": ""
+          },
+          "phone": {
+            "type": "string",
+            "description": "Customer phone number.",
+            "example": "08031234567"
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order. Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "87dfhw8dbw8e7hw9d9dh"
+          }
+        },
+        "required": [
+          "serviceID",
+          "plan",
+          "api",
+          "amount",
+          "phone"
+        ],
+        "title": "Buy Exam Pin"
+      },
+      "BuySocialRequest": {
+        "type": "object",
+        "properties": {
+          "serviceID": {
+            "type": "string",
+            "description": "Always `socials`.",
+            "example": "socials"
+          },
+          "plan": {
+            "type": "string",
+            "description": "The plan value from [Get Plans](#plans) (`service=socials`).",
+            "example": "179"
+          },
+          "api": {
+            "type": "string",
+            "description": "Your API key. Send the same key you use in the `Authorization` header.",
+            "example": "YOUR_API_KEY"
+          },
+          "amount": {
+            "type": "string",
+            "description": "Send as an empty string. The price is set by the plan.",
+            "example": ""
+          },
+          "link": {
+            "type": "string",
+            "description": "The profile or post URL the order should be delivered to.",
+            "example": "https://instagram.com/gsubzonline"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "How many to deliver. Must be a positive whole number.",
+            "example": 1000
+          },
+          "requestID": {
+            "type": "string",
+            "description": "Your own unique reference for this order (for example your order ID). Use it later with [Fetch Transaction Status](#transaction-status).",
+            "example": "8dhbc8w7huwh8hw9hew9"
+          }
+        },
+        "required": [
+          "serviceID",
+          "plan",
+          "api",
+          "amount",
+          "link",
+          "quantity"
+        ],
+        "title": "Buy Social Media Service"
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "description": "Standard response for a purchase. Check `status` first: `successful` means delivered, `failed` means it did not go through.",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 200
+          },
+          "status": {
+            "type": "string",
+            "example": "successful",
+            "description": "`successful` means delivered. `failed` means it did not go through."
+          },
+          "transactionID": {
+            "type": "integer",
+            "description": "GSUBZ transaction reference."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Purchase value in naira."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone number the purchase was for, where the service uses one."
+          },
+          "serviceID": {
+            "type": "string"
+          },
+          "amountPaid": {
+            "type": "number",
+            "description": "Amount deducted from your wallet at your API price, in naira."
+          },
+          "initialBalance": {
+            "type": "number",
+            "description": "Wallet balance before the purchase."
+          },
+          "finalBalance": {
+            "type": "number",
+            "description": "Wallet balance after the purchase."
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO 8601, West Africa Time (+01:00)."
+          },
+          "api_response": {
+            "type": "string",
+            "description": "Message returned by the network or provider."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "description": "A failed request. `status` is `failed`, and the problem is identified by `code` and `description`: 200 successful, 204 REQUIRED_CONTENT_NOT_SENT, 206 INVALID_CONTENT, 401 INVALID_PLAN, 402 INSUFFICIENT_BALANCE, 404 CONTENT_NOT_FOUND, 405 REQUEST_METHOD_NOT_IN_POST, 406 SERVICE_DISABLED, 406 INVALID_ARGUMENTS_DUPLICATE_REQUEST_ID, 406 NOT_CANCELLABLE, 429 TOO_MANY_REQUESTS, 502 GATEWAY_ERROR.",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 402
+          },
+          "status": {
+            "type": "string",
+            "example": "INSUFFICIENT_BALANCE"
+          },
+          "description": {
+            "type": "string",
+            "example": "INSUFFICIENT_BALANCE"
+          },
+          "api_response": {
+            "type": "string",
+            "description": "Plain-words explanation of what went wrong."
+          }
+        }
+      }
+    }
+  }
+}
