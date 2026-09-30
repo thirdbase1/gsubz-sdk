@@ -32,6 +32,14 @@ off so you can't get them wrong:
   instruction, never auto-retries a purchase. The SDK never re-sends money
   movement blindly; use `verifyTransaction()` instead (same call the doc
   prescribes).
+- **Bad input caught locally** — a malformed phone number, an airtime amount
+  under ₦100, a 906-character SMS: all refused before a single byte leaves
+  your process, using the doc's own rules.
+- **Safe auto-retry** — the doc says `502 GATEWAY_ERROR` is safe to retry and
+  `429` means back off. The SDK retries those automatically, always with the
+  same `requestID`, so a retry can never charge twice.
+- **Optional debug log** — `new Gsubz({ debug: true })` prints every
+  request/response (key redacted) for production troubleshooting.
 - **Full typings** — every response shape is a TypeScript interface, every
   doc'd error code is a constant.
 
@@ -318,6 +326,9 @@ too many requests · `502` gateway error. The full table is exported as
 - **SMS came back `MESSAGE_CONTENT_BLOCKED`** — read `e.body.issues`; the
   networks block bank/OTP/brand wording and 4+ digit runs ("5,000" is fine,
   "5000" is not).
+- **Suspicious about retries?** Only `502` (doc: "safe to retry") and `429`
+  are auto-retried, always with the same `requestID`. Everything else
+  surfaces as a `GsubzError` for you to decide.
 - **eSIM stuck on `provisioning`** — use `buyEsimReady()`, which polls for
   you, or keep checking `esimOrders()`. You were already charged; the QR code
   arrives when provisioning finishes.

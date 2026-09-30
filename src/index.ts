@@ -219,6 +219,26 @@ export class GsubzError extends Error {
   }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Input validation — the doc's own rules, caught before any network    */
+/* ------------------------------------------------------------------ */
+
+/** 11-digit Nigerian format, e.g. 08031234567 (doc: Phone numbers). */
+export function assertNigerianPhone(phone: string, what = "phone"): void {
+  if (!/^0\d{10}$/.test(phone)) {
+    throw new Error(
+      `gsubz-sdk: ${what} must be an 11-digit Nigerian number like 08031234567 (got "${phone}").`,
+    );
+  }
+}
+
+function assertAmount(naira: number, min: number, what: string): void {
+  if (!Number.isFinite(naira) || naira < min) {
+    throw new Error(`gsubz-sdk: ${what} must be a number >= ${min} (got ${naira}).`);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Client                                                              */
 /* ------------------------------------------------------------------ */
@@ -234,6 +254,8 @@ export interface GsubzClientOptions {
   baseUrl?: string;
   /** Extra headers for every request (e.g. request tracing). */
   headers?: Record<string, string>;
+  /** Log every request/response to console.debug (key redacted). */
+  debug?: boolean;
   /** Custom fetch (Node 18+ has global fetch; pass a wrapper for proxies). */
   fetchImpl?: typeof fetch;
 }
@@ -322,6 +344,9 @@ export class Gsubz {
   private readonly timeoutMs: number;
   private readonly extraHeaders: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
+  /** When true, logs every request/response pair to console.debug — for
+   *  production debugging. Never logs the API key itself. */
+  private readonly debug: boolean;
 
   constructor(opts: GsubzClientOptions = {}) {
     const key = opts.apiKey ?? (typeof process !== "undefined" ? process.env?.GSUBZ_API_KEY : undefined);
@@ -334,6 +359,7 @@ export class Gsubz {
     this.baseUrl = (opts.baseUrl ?? BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = opts.timeoutMs ?? 90_000;
     this.extraHeaders = opts.headers ?? {};
+    this.debug = opts.debug ?? false;
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
@@ -344,6 +370,7 @@ export class Gsubz {
     path: string,
     fields: Record<string, string | number | undefined>,
     opts: { withApiKeyBody?: boolean; noAuth?: boolean; timeoutMs?: number } = {},
+    attempt = 0,
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
     const controller = new AbortController();
@@ -356,6 +383,7 @@ export class Gsubz {
       if (v !== undefined) body.set(k, String(v));
     }
 
+    const t0 = Date.now();
     try {
       const res = await this.fetchImpl(url, {
         method,
@@ -385,9 +413,34 @@ export class Gsubz {
       // The doc: HTTP 200 can still carry a failed transaction. Only bodies
       // that actually carry a `status` are outcomes — plan/catalogue endpoints
       // have no status field and must pass through untouched (verified live).
+      if (this.debug) {
+        const safe = { ...json };
+        if (typeof safe.api === "string") safe.api = "***";
+        console.debug(`gsubz-sdk ${method} ${path} -> ${res.status} (${Date.now() - t0}ms)`, safe);
+      }
       if (typeof json.status === "string") {
+        const err = new GsubzError(json, res.status);
         const ok = json.status === "successful" || json.status === "success";
-        if (!ok) throw new GsubzError(json, res.status);
+        if (!ok) {
+          // Doc: 502 GATEWAY_ERROR is "safe to retry"; 429 is "wait a minute".
+          // Never retried blindly — purchases always carry a requestID, so a
+          // retry can return the original result instead of charging twice.
+          const retryable =
+            (err.code === 502 && attempt < 2) || (err.code === 429 && attempt < 1);
+          if (retryable && method === "POST" && fields.requestID !== undefined) {
+            const wait = err.code === 429 ? 30_000 : 2_000 * (attempt + 1);
+            await new Promise((r) => setTimeout(r, wait));
+            return this.request<T>(method, path, fields, opts, attempt + 1);
+          }
+          throw err;
+        }
+        // Doc: a duplicate 406 can arrive with status "successful" — surface it
+        // as a duplicate instead of a silent fresh purchase.
+        if (err.duplicateRequestID) {
+          const marked = json as T & { duplicateRequestID?: boolean };
+          marked.duplicateRequestID = true;
+          return marked;
+        }
       }
       return json as T;
     } catch (e) {
@@ -451,6 +504,7 @@ export class Gsubz {
 
   /** Buy a data bundle. `plan` comes from getPlans(serviceID). */
   async buyData(input: BuyDataInput): Promise<TransactionResponse> {
+    assertNigerianPhone(input.phone);
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: input.serviceID,
@@ -463,6 +517,8 @@ export class Gsubz {
 
   /** Buy airtime (min ₦100). serviceID: mtn | airtel | etisalat | glo. */
   async buyAirtime(input: BuyAirtimeInput): Promise<TransactionResponse> {
+    assertNigerianPhone(input.phone);
+    assertAmount(input.amount, 100, "amount (doc: airtime minimum is ₦100)");
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: input.serviceID,
@@ -474,6 +530,10 @@ export class Gsubz {
 
   /** Renew DStv/GOtv/StarTimes. Verify the smartcard first. */
   async buyCable(input: BuyCableInput): Promise<TransactionResponse> {
+    assertNigerianPhone(input.phone);
+    if (!input.customerID || !/^\d{10,13}$/.test(input.customerID)) {
+      throw new Error(`gsubz-sdk: customerID must be the 10–13 digit IUC/smartcard number (got "${input.customerID}").`);
+    }
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: input.serviceID,
@@ -487,6 +547,8 @@ export class Gsubz {
 
   /** Prepaid token or postpaid bill. Verify the meter first. */
   async buyElectricity(input: BuyElectricityInput): Promise<TransactionResponse> {
+    assertNigerianPhone(input.phone);
+    assertAmount(input.amount, 0, "amount");
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: input.serviceID,
@@ -500,6 +562,7 @@ export class Gsubz {
 
   /** WAEC/NECO/NABTEB result pins. */
   async buyExamPin(input: BuyExamPinInput): Promise<TransactionResponse> {
+    assertNigerianPhone(input.phone);
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: input.serviceID,
@@ -512,6 +575,12 @@ export class Gsubz {
 
   /** Social media orders (followers, likes…). serviceID is always `socials`. */
   async buySocial(input: BuySocialInput): Promise<TransactionResponse> {
+    if (!/^https?:\/\//.test(input.link)) {
+      throw new Error(`gsubz-sdk: link must be an http(s) URL (got "${input.link}").`);
+    }
+    if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
+      throw new Error(`gsubz-sdk: quantity must be a positive whole number (got ${input.quantity}).`);
+    }
     const requestID = input.requestID ?? this.newRequestID();
     return this.request<TransactionResponse>("POST", "/api/pay/", {
       serviceID: "socials",
@@ -531,6 +600,9 @@ export class Gsubz {
     value: "100" | "200" | "400" | "500";
     number: number;
   }): Promise<GeneratePinsResponse> {
+    if (input.value !== "500" && input.number < 10) {
+      throw new Error("gsubz-sdk: number must be at least 10 for values below 500 (doc rule).");
+    }
     return this.request<GeneratePinsResponse>("POST", "/apiV2/generate/", {
       network: input.network,
       value: input.value,
@@ -586,6 +658,18 @@ export class Gsubz {
    *  Note the doc's content rules: no bank/OTP/international-brand wording,
    *  no 4+ digit runs (write "5,000", not "5000"). */
   async sendSms(input: SendSmsInput): Promise<SmsResponse> {
+    if (!/^[a-zA-Z]{3,11}$/.test(input.from)) {
+      throw new Error(`gsubz-sdk: from must be 3-11 letters with no spaces/numbers (got "${input.from}").`);
+    }
+    if (input.msg.length > 905) {
+      throw new Error(`gsubz-sdk: msg is ${input.msg.length} chars; the doc caps it at 905.`);
+    }
+    const recipients = (Array.isArray(input.to) ? input.to.join(",") : input.to)
+      .split(/[\s,]+/).filter(Boolean);
+    if (recipients.length === 0) throw new Error("gsubz-sdk: no recipients given.");
+    if (recipients.length > 5_000) {
+      throw new Error(`gsubz-sdk: ${recipients.length} recipients; the doc caps a send at 5,000.`);
+    }
     const requestID = input.requestID ?? this.newRequestID();
     const to = Array.isArray(input.to) ? input.to.join(",") : input.to;
     return this.request<SmsResponse>("POST", "/api/sms/", {
@@ -619,9 +703,17 @@ export class Gsubz {
       (p) => p.displayName.toLowerCase().replace(/\s+/g, "") === q,
     );
     if (hit) return hit;
-    const partial = res.plans.find(
+    const partials = res.plans.filter(
       (p) => p.displayName.toLowerCase().replace(/\s+/g, "").includes(q),
     );
+    if (partials.length === 1) return partials[0] as Plan;
+    if (partials.length > 1) {
+      const list = partials.map((p) => `  - "${p.displayName}" (value: ${p.value}, ₦${p.api_price})`).join("\n");
+      throw new Error(
+        `gsubz-sdk: "${query}" matches ${partials.length} plans for "${serviceID}" — pick one explicitly:\n${list}`,
+      );
+    }
+    const partial = partials[0];
     if (partial) return partial;
     const list = res.plans.map((p) => `  - "${p.displayName}" (value: ${p.value}, ₦${p.api_price})`).join("\n");
     throw new Error(

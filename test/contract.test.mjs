@@ -209,4 +209,65 @@ test("sendSmsOne: single number, no array needed", async () => {
   assert.equal(seen[0].params.to, "08031234567");
 });
 
+test("validation: bad phone caught locally, no network call", async () => {
+  seen.length = 0;
+  responder = () => { throw new Error("should not be reached"); };
+  await assert.rejects(
+    () => g.buyData({ serviceID: "mtn_sme", plan: "166", phone: "080123" }),
+    /11-digit Nigerian number/,
+  );
+  assert.equal(seen.length, 0, "no request should have left the process");
+});
+
+test("validation: airtime below ₦100 caught locally (doc minimum)", async () => {
+  seen.length = 0;
+  responder = () => { throw new Error("should not be reached"); };
+  await assert.rejects(() => g.buyAirtime({ serviceID: "mtn", amount: 50, phone: "08031234567" }), /minimum/);
+  assert.equal(seen.length, 0);
+});
+
+test("validation: SMS caps enforced locally (905 chars, 5000 recipients, sender name)", async () => {
+  responder = () => { throw new Error("should not be reached"); };
+  await assert.rejects(() => g.sendSms({ from: "AB1", to: "08031234567", msg: "hi" }), /3-11 letters/);
+  await assert.rejects(() => g.sendSms({ from: "SHOP", to: "08031234567", msg: "x".repeat(906) }), /905/);
+  const many = Array.from({ length: 5001 }, () => "08031234567").join(",");
+  await assert.rejects(() => g.sendSms({ from: "SHOP", to: many, msg: "hi" }), /5,000/);
+});
+
+test("validation: generatePins minimum of 10 for values below 500 (doc rule)", async () => {
+  responder = () => { throw new Error("should not be reached"); };
+  await assert.rejects(() => g.generatePins({ network: "mtn", value: "100", number: 5 }), /at least 10/);
+  // 500 has no minimum per the doc
+  responder = () => ({ code: 200, body: { message: "ok", status: "success", pins: [] } });
+  await g.generatePins({ network: "mtn", value: "500", number: 1 });
+});
+
+test("502 GATEWAY_ERROR is retried automatically, then succeeds (doc: safe to retry)", async () => {
+  seen.length = 0;
+  let calls = 0;
+  responder = () => {
+    calls++;
+    if (calls < 3) return { code: 502, body: { status: "failed", code: 502, description: "GATEWAY_ERROR" } };
+    return { code: 200, body: { status: "successful", code: 200, transactionID: 11 } };
+  };
+  const tx = await g.buyAirtime({ serviceID: "mtn", amount: 500, phone: "08031234567", requestID: "R502" });
+  assert.equal(tx.transactionID, 11);
+  assert.equal(seen.length, 3, "same requestID resent on every retry");
+  assert.equal(seen[2].params.requestID, "R502");
+});
+
+test("duplicate 406 arriving as status=successful is still flagged", async () => {
+  responder = () => ({ code: 406, body: { status: "successful", code: 406, description: "INVALID_ARGUMENTS_DUPLICATE_REQUEST_ID", transactionID: 9 } });
+  const tx = await g.buyAirtime({ serviceID: "mtn", amount: 500, phone: "08031234567", requestID: "RDUP" });
+  assert.equal(tx.duplicateRequestID, true);
+});
+
+test("findPlan: ambiguous query lists every match instead of guessing", async () => {
+  responder = () => ({ code: 200, body: { service: "MTN SME Data", PlanName: "plan_id", plans: [
+    { displayName: "1GB - 30days", value: "166", price: "399", api_price: "380.58" },
+    { displayName: "1GB - 7days", value: "180", price: "299", api_price: "285.20" },
+  ] } });
+  await assert.rejects(() => g.findPlan("mtn_sme", "1gb"), /matches 2 plans/);
+});
+
 after(() => server.close());
