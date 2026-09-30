@@ -66,7 +66,9 @@ export type Status = "successful" | "failed";
 
 /** Fields every purchase response shares (doc: "Responses" section). */
 export interface TransactionResponse {
-  code: number;
+  /** Usually a number; the doc's Fetch Transaction Status example returns it
+   *  as the string "200" — accept both. */
+  code: number | string;
   status: Status;
   transactionID?: number | string;
   amount?: number;
@@ -222,8 +224,10 @@ export class GsubzError extends Error {
 /* ------------------------------------------------------------------ */
 
 export interface GsubzClientOptions {
-  /** Your API key (starts with ap_). Keep it server-side only. */
-  apiKey: string;
+  /** Your API key (starts with ap_). Keep it server-side only.
+   *  Optional: falls back to `process.env.GSUBZ_API_KEY`, so
+   *  `new Gsubz()` works once the env var is set. */
+  apiKey?: string;
   /** Request timeout in ms. The doc says use at least 60s. Default 90_000. */
   timeoutMs?: number;
   /** Override the base URL (tests/mocks). Default https://api.gsubz.com. */
@@ -319,9 +323,14 @@ export class Gsubz {
   private readonly extraHeaders: Record<string, string>;
   private readonly fetchImpl: typeof fetch;
 
-  constructor(opts: GsubzClientOptions) {
-    if (!opts.apiKey) throw new Error("GSUBZ: apiKey is required");
-    this.apiKey = opts.apiKey;
+  constructor(opts: GsubzClientOptions = {}) {
+    const key = opts.apiKey ?? (typeof process !== "undefined" ? process.env?.GSUBZ_API_KEY : undefined);
+    if (!key) {
+      throw new Error(
+        "gsubz-sdk: no API key. Pass new Gsubz({ apiKey }) or set the GSUBZ_API_KEY environment variable.",
+      );
+    }
+    this.apiKey = key;
     this.baseUrl = (opts.baseUrl ?? BASE_URL).replace(/\/+$/, "");
     this.timeoutMs = opts.timeoutMs ?? 90_000;
     this.extraHeaders = opts.headers ?? {};
@@ -593,6 +602,83 @@ export class Gsubz {
    *  after a timeout before retrying, per the doc. */
   async verifyTransaction(requestID: string): Promise<TransactionResponse> {
     return this.request<TransactionResponse>("POST", "/api/verify/", { requestID });
+  }
+
+  /* ---------------- Seamless helpers (built on the calls above) ---------------- */
+
+  /** Find a plan by human text instead of a magic number.
+   *  `await gsubz.findPlan("mtn_sme", "1gb")` → the 1GB plan.
+   *  Matching is case/space-insensitive on displayName, and also accepts the
+   *  exact plan value. Throws a helpful error listing close matches. */
+  async findPlan(serviceID: string, query: string): Promise<Plan> {
+    const res = await this.getPlans(serviceID);
+    const q = query.toLowerCase().replace(/\s+/g, "");
+    const exact = res.plans.find((p) => p.value === query);
+    if (exact) return exact;
+    const hit = res.plans.find(
+      (p) => p.displayName.toLowerCase().replace(/\s+/g, "") === q,
+    );
+    if (hit) return hit;
+    const partial = res.plans.find(
+      (p) => p.displayName.toLowerCase().replace(/\s+/g, "").includes(q),
+    );
+    if (partial) return partial;
+    const list = res.plans.map((p) => `  - "${p.displayName}" (value: ${p.value}, ₦${p.api_price})`).join("\n");
+    throw new Error(
+      `gsubz-sdk: no plan matching "${query}" for service "${serviceID}".\nAvailable plans:\n${list}`,
+    );
+  }
+
+  /** Buy data by human plan name — one call, no catalogue round-trip in your code.
+   *  `await gsubz.buyDataByPlan("mtn_sme", "1gb", "08031234567")` */
+  async buyDataByPlan(
+    serviceID: string,
+    planQuery: string,
+    phone: string,
+    opts: PayOptions = {},
+  ): Promise<TransactionResponse> {
+    const plan = await this.findPlan(serviceID, planQuery);
+    return this.buyData({ serviceID, plan: plan.value, phone, requestID: opts.requestID });
+  }
+
+  /** Buy an eSIM and wait until it is usable — resolves the finished order
+   *  (iccid + activationCode + qrCodeUrl filled in). Handles the doc's
+   *  `provisioning` state for you.
+   *  @param pollMs how often to check, default 5s
+   *  @param timeoutMs give up waiting after this, default 120s (you were
+   *  charged either way — the order stays lookupable via esimOrders) */
+  async buyEsimReady(
+    input: { packageCode: string; requestID?: string },
+    pollMs = 5_000,
+    timeoutMs = 120_000,
+  ): Promise<EsimOrder> {
+    const buy = await this.buyEsim(input);
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const { orders } = await this.esimOrders({ requestID: buy.requestID });
+      const order = orders.find((o) => o.orderID === Number(buy.orderID)) ?? orders[0];
+      if (order && order.esimStatus !== "provisioning") return order;
+      if (Date.now() > deadline) {
+        throw new GsubzError(
+          { code: 0, description: "ESIM_STILL_PROVISIONING",
+            api_response: `Still provisioning after ${timeoutMs}ms. You were charged — keep polling esimOrders({ requestID: "${buy.requestID}" }).` },
+          0,
+        );
+      }
+      await new Promise((r) => setTimeout(r, pollMs));
+    }
+  }
+
+  /** Send an SMS to ONE number — the common case, zero ceremony.
+   *  Sender-name rules still apply (3–11 letters, no banks/telecom names). */
+  async sendSmsOne(from: string, to: string, msg: string, opts: PayOptions = {}): Promise<SmsResponse> {
+    return this.sendSms({ from, to, msg, requestID: opts.requestID });
+  }
+
+  /** True when the wallet can cover `naira`. Cheap pre-flight so purchases
+   *  don't die with INSUFFICIENT_BALANCE. */
+  async canAfford(naira: number): Promise<boolean> {
+    return (await this.getBalance()) >= naira;
   }
 }
 

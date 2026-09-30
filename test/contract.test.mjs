@@ -162,4 +162,51 @@ test("verify transaction hits /api/verify/ with requestID", async () => {
   assert.equal(seen[0].params.requestID, "X1");
 });
 
+test("findPlan: matches on display text, returns the plan value", async () => {
+  seen.length = 0;
+  responder = () => ({ code: 200, body: { service: "MTN SME Data", PlanName: "plan_id", plans: [
+    { displayName: "500MB - 7days", value: "179", price: "299", api_price: "285.20" },
+    { displayName: "1GB - 30days", value: "166", price: "399", api_price: "380.58" },
+  ] } });
+  const p = await g.findPlan("mtn_sme", "1gb");
+  assert.equal(p.value, "166");
+  const byValue = await g.findPlan("mtn_sme", "179");
+  assert.equal(byValue.displayName, "500MB - 7days");
+});
+
+test("findPlan: unknown plan lists the options instead of failing silently", async () => {
+  responder = () => ({ code: 200, body: { service: "MTN SME Data", PlanName: "plan_id", plans: [
+    { displayName: "1GB - 30days", value: "166", price: "399", api_price: "380.58" },
+  ] } });
+  await assert.rejects(() => g.findPlan("mtn_sme", "999tb"), /Available plans/);
+});
+
+test("buyDataByPlan: resolves the plan then pays with its value", async () => {
+  seen.length = 0;
+  let call = 0;
+  responder = () => {
+    call++;
+    if (call === 1) return { code: 200, body: { service: "MTN SME Data", PlanName: "plan_id", plans: [
+      { displayName: "1GB - 30days", value: "166", price: "399", api_price: "380.58" }] } };
+    return { code: 200, body: { status: "successful", code: 200, transactionID: 5 } };
+  };
+  const tx = await g.buyDataByPlan("mtn_sme", "1gb", "08031234567", { requestID: "R1" });
+  assert.equal(tx.transactionID, 5);
+  assert.equal(seen[1].params.plan, "166");
+  assert.equal(seen[1].params.requestID, "R1");
+});
+
+test("canAfford: compares against the string balance", async () => {
+  responder = () => ({ code: 200, body: { status: "successful", code: 200, balance: "747.5" } });
+  assert.equal(await g.canAfford(500), true);
+  assert.equal(await g.canAfford(1000), false);
+});
+
+test("sendSmsOne: single number, no array needed", async () => {
+  seen.length = 0;
+  responder = () => ({ code: 200, body: { status: "successful", code: 200, sent: 1, failed: 0 } });
+  await g.sendSmsOne("MyShop", "08031234567", "ready for pickup");
+  assert.equal(seen[0].params.to, "08031234567");
+});
+
 after(() => server.close());

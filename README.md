@@ -170,6 +170,38 @@ console.log(sms.sent, sms.failed, sms.recipients);
 > The network silently rejects SMS about banks, OTPs, or with bare digit runs
 > (write "5,000", not "5000") — the doc's content rules. Keep them in mind.
 
+## Even simpler
+
+The client also has shortcuts for the shapes every integration ends up writing:
+
+```ts
+// Buy data by plan NAME — no magic numbers, no catalogue round-trip in your code
+await gsubz.buyDataByPlan("mtn_sme", "1gb", "08031234567");
+
+// Find a plan and see its price
+const plan = await gsubz.findPlan("dstv", "confam"); // → { value: "confam", api_price: "..." }
+// A wrong guess fails with the full list of valid plans, right in the message
+
+// eSIM: one call, resolved only when the QR code is ready
+const order = await gsubz.buyEsimReady({ packageCode: "FR_1_7" });
+console.log(order.iccid, order.activationCode, order.qrCodeUrl);
+
+// One SMS, no arrays
+await gsubz.sendSmsOne("MyShop", "08031234567", "Your order is ready");
+
+// Pre-flight the wallet
+if (!(await gsubz.canAfford(2000))) throw new Error("top up first");
+```
+
+Setup is one line too — no key argument needed if the env var is set:
+
+```bash
+export GSUBZ_API_KEY=ap_yourkey
+```
+```ts
+const gsubz = new Gsubz(); // picks up GSUBZ_API_KEY automatically
+```
+
 ## Money safety
 
 ### Idempotency (`requestID`)
