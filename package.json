@@ -1,6 +1,6 @@
 {
   "name": "gsubz-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Unofficial TypeScript/JavaScript SDK for the GSUBZ API — airtime, data, cable TV, electricity, exam pins, social media, eSIM, bulk SMS and wallet.",
   "keywords": [
     "gsubz",

@@ -35,27 +35,46 @@ off so you can't get them wrong:
 - **Full typings** — every response shape is a TypeScript interface, every
   doc'd error code is a constant.
 
-## Quickstart
+## Getting started (3 steps)
+
+**1. Install** — Node 18 or newer, no other requirements:
+
+```bash
+npm install gsubz-sdk
+```
+
+**2. Add your key.** Get it from your GSUBZ dashboard (it starts with `ap_`)
+and keep it server-side only — never in browser or mobile code:
+
+```bash
+export GSUBZ_API_KEY=ap_yourkey
+```
+
+**3. Use it.** With the env var set, the client constructs itself:
 
 ```ts
 import Gsubz from "gsubz-sdk";
 
-const gsubz = new Gsubz({ apiKey: process.env.GSUBZ_API_KEY }); // starts with ap_
+const gsubz = new Gsubz(); // picks up GSUBZ_API_KEY automatically
 
-// 1. Check your wallet
+// Check your wallet
 const balance = await gsubz.getBalance(); // → 1234.5 (naira)
 
-// 2. See what MTN SME data costs you
+// What does MTN SME data cost?
 const plans = await gsubz.getPlans("mtn_sme");
 for (const p of plans.plans) console.log(p.displayName, "₦" + p.api_price);
 
-// 3. Sell 1GB (plan value from the list above)
-const tx = await gsubz.buyData({
-  serviceID: "mtn_sme",
-  plan: "166",
-  phone: "08031234567",
-});
+// Buy 1GB by name — no magic plan numbers needed
+const tx = await gsubz.buyDataByPlan("mtn_sme", "1gb", "08031234567");
 console.log(tx.status, tx.transactionID, tx.requestID);
+```
+
+Prefer passing the key explicitly? `new Gsubz({ apiKey: "ap_..." })` works too.
+
+See it run against the real API without a key or spending anything:
+
+```bash
+npm run example:live
 ```
 
 That's the whole happy path. Everything else is the same shape.
@@ -67,9 +86,24 @@ fields the way the doc describes.
 
 ### Data
 
+Easiest — by plan name:
+
+```ts
+await gsubz.buyDataByPlan("mtn_sme", "1gb", "08031234567");
+```
+
+Or with the exact plan value from `getPlans()`:
+
 ```ts
 await gsubz.buyData({ serviceID: "mtn_sme", plan: "166", phone: "08031234567" });
 ```
+
+`serviceID` values for data: `mtn_sme`, `mtn_gifting`, `airtel_sme`,
+`airtel_gifting`, `glo_sme`, `glo_data`, `etisalat_data`, `mtn_fibrex`,
+`mtn_datashare` (the doc's live list — also in `spec/gsubz-docs.md`).
+Electricity IDs use hyphens (`kaduna-electric`) but underscores work
+identically — the spec states `kaduna_electric` and `kaduna-electric`
+are the same, and this README's examples use either.
 
 ### Airtime (min ₦100)
 
@@ -269,15 +303,34 @@ POST · `406` service disabled / duplicate requestID / not cancellable · `429`
 too many requests · `502` gateway error. The full table is exported as
 `RESPONSE_CODES`.
 
+## Troubleshooting
+
+- **"no API key" error** — the `GSUBZ_API_KEY` env var isn't set and you
+  constructed with no `apiKey`. Fix one or the other.
+- **`402 INSUFFICIENT_BALANCE`** — fund your GSUBZ wallet. Check first with
+  `await gsubz.canAfford(2000)`.
+- **`401 INVALID_PLAN`** — the plan/variation doesn't match the service.
+  Never hard-code plan values; fetch with `getPlans()` or just use
+  `buyDataByPlan()`.
+- **A purchase timed out** — do NOT resend. Look it up first:
+  `await gsubz.verifyTransaction(requestID)`. Same `requestID` on a retry
+  can never double charge.
+- **SMS came back `MESSAGE_CONTENT_BLOCKED`** — read `e.body.issues`; the
+  networks block bank/OTP/brand wording and 4+ digit runs ("5,000" is fine,
+  "5000" is not).
+- **eSIM stuck on `provisioning`** — use `buyEsimReady()`, which polls for
+  you, or keep checking `esimOrders()`. You were already charged; the QR code
+  arrives when provisioning finishes.
+
 ## Configuration
 
 ```ts
 const gsubz = new Gsubz({
-  apiKey: process.env.GSUBZ_API_KEY, // required
-  timeoutMs: 90_000,                 // default; doc asks for ≥ 60s on purchases
-  baseUrl: "https://api.gsubz.com",  // override for tests/mocks
-  headers: { "X-Trace-Id": "..." },  // added to every request
-  fetchImpl: myFetch,                // custom fetch (proxies, test doubles)
+  apiKey: "ap_...",                 // optional — falls back to GSUBZ_API_KEY
+  timeoutMs: 90_000,                // default; doc asks for ≥ 60s on purchases
+  baseUrl: "https://api.gsubz.com", // override for tests/mocks
+  headers: { "X-Trace-Id": "..." }, // added to every request
+  fetchImpl: myFetch,               // custom fetch (proxies, test doubles)
 });
 ```
 
