@@ -5,7 +5,10 @@
 One dependency-free client for everything GSUBZ sells: airtime, data bundles,
 cable TV, electricity tokens, exam pins, social-media orders, recharge pins,
 eSIMs, bulk SMS — plus wallet balance, meter/smartcard verification and
-transaction lookups.
+transaction lookups. **New in 0.2.0:** game top-ups, flight search & booking,
+the Gsubz Store, service catalogue, recharge-pin history, webhook
+verification, and an [AI-agent guide](docs/AGENT-GUIDE.md) that maps every
+task to a method with its cost and traps.
 
 Everything in here is taken straight from the official API doc (a copy of the
 doc and the OpenAPI spec live in [`spec/`](spec/)). Nothing is invented.
