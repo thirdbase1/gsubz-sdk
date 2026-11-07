@@ -1,7 +1,7 @@
 {
   "name": "gsubz-sdk",
-  "version": "0.2.0",
-  "description": "Unofficial TypeScript/JavaScript SDK for the GSUBZ API \u2014 airtime, data, cable TV, electricity, exam pins, social media, eSIM, bulk SMS and wallet.",
+  "version": "0.2.1",
+  "description": "Unofficial TypeScript/JavaScript SDK for the GSUBZ API — airtime, data, cable TV, electricity, exam pins, social media, eSIM, bulk SMS and wallet.",
   "keywords": [
     "gsubz",
     "vtu",
@@ -30,7 +30,8 @@
     "dist",
     "README.md",
     "LICENSE",
-    "spec"
+    "spec",
+    "docs"
   ],
   "engines": {
     "node": ">=18"
