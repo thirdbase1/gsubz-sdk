@@ -10,6 +10,10 @@ the Gsubz Store, service catalogue, recharge-pin history, webhook
 verification, and an [AI-agent guide](docs/AGENT-GUIDE.md) that maps every
 task to a method with its cost and traps.
 
+**New to coding or GSUBZ? Start here: 📖 [The Beginner's Guide](docs/BEGINNER-GUIDE.md)** —
+a zero-to-first-purchase walkthrough: setup in 5 minutes, your first free API
+call, your first ₦100 purchase, and the rules that keep your wallet safe.
+
 Everything in here is taken straight from the official API doc (a copy of the
 doc and the OpenAPI spec live in [`spec/`](spec/)). Nothing is invented.
 
