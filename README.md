@@ -7,15 +7,15 @@ cable TV, electricity tokens, exam pins, social-media orders, recharge pins,
 eSIMs, bulk SMS — plus wallet balance, meter/smartcard verification and
 transaction lookups. **New in 0.2.0:** game top-ups, flight search & booking,
 the Gsubz Store, service catalogue, recharge-pin history, webhook
-verification, and an [AI-agent guide](docs/AGENT-GUIDE.md) that maps every
+verification, and an [AI-agent guide](https://github.com/thirdbase1/gsubz-sdk/blob/main/docs/AGENT-GUIDE.md) that maps every
 task to a method with its cost and traps.
 
-**New to coding or GSUBZ? Start here: 📖 [The Beginner's Guide](docs/BEGINNER-GUIDE.md)** —
+**New to coding or GSUBZ? Start here: 📖 [The Beginner's Guide](https://github.com/thirdbase1/gsubz-sdk/blob/main/docs/BEGINNER-GUIDE.md)** —
 a zero-to-first-purchase walkthrough: setup in 5 minutes, your first free API
 call, your first ₦100 purchase, and the rules that keep your wallet safe.
 
 Everything in here is taken straight from the official API doc (a copy of the
-doc and the OpenAPI spec live in [`spec/`](spec/)). Nothing is invented.
+doc and the OpenAPI spec live in [`spec/`](https://github.com/thirdbase1/gsubz-sdk/tree/main/spec)). Nothing is invented.
 
 ```bash
 npm install gsubz-sdk
